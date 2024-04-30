@@ -10,21 +10,24 @@ app.start = (file, database) => {
         db.run(`DROP TABLE IF EXISTS movies`);
         db.run(`CREATE TABLE IF NOT EXISTS movies (
             year INTEGER,
-            producer TEXT
+            title TEXT,
+            studios TEXT,
+            producers TEXT,
+            winner INTEGER
         )`);
 
         const csvFilePath = file;
         const results = [];
 
         fs.createReadStream(csvFilePath)
-            .pipe(csvParser())
+            .pipe(csvParser({separator: ';'}))
             .on('data', (data) => {
                 results.push(data);
             })
             .on('end', () => {
-                const stmt = db.prepare('INSERT INTO movies (year, producer) VALUES (?, ?)');
+                const stmt = db.prepare('INSERT INTO movies (year, title, studios, producers, winner) VALUES (?, ?,?,?,?)');
                 results.forEach((row) => {
-                    stmt.run(row['Year'], row['Producer']);
+                    stmt.run(row['year'], row['title'], row['studios'], row['producers'], row['winner']);
                 });
                 stmt.finalize();
             });
@@ -51,7 +54,7 @@ const calculateProducerIntervals = (movies) => {
     return intervals;
 }
 app.get('/prize-range', (req, res) => {
-    const query = 'select * from movies order by year'
+    const query = 'select * from movies where winner = "yes" order by year'
 
     db.all(query, [], (err, movies) => {
         if (err) {
@@ -60,20 +63,28 @@ app.get('/prize-range', (req, res) => {
         }
         
         const moviesByProducer = movies.reduce((acc, movie) => {
-            acc[movie.producer] = acc[movie.producer] || [];
-            acc[movie.producer].push(movie);
+            const producers = movie.producers.split(/,|\sand\s/);
+            for (let i = 0; i < producers.length; i++) {
+                let producerName = producers[i].trim();
+                acc[producerName] = acc[producerName] || [];
+                movie.producer = producerName
+                acc[producerName].push({...movie});
+            }
             return acc;
         }, {});
 
-        const min = {}
-        const max = {}
-        for (const [producer, producerMovies] of Object.entries(moviesByProducer)) {
-            const intervals = calculateProducerIntervals(producerMovies);            
-            min[producer] = intervals.sort((a, b) => a.interval - b.interval)
-                .slice(0, 1);
-            max[producer] = intervals.sort((a, b) => b.interval - a.interval)
-                .slice(0, 1);
+        let intervals = []
+        for (const producerMovies of Object.values(moviesByProducer)) {
+            const prodIntervals = calculateProducerIntervals(producerMovies);
+            if (prodIntervals.length > 0) {
+                intervals = [...intervals, ...prodIntervals];
+            }
         }
+        let min = [...intervals].sort((a, b) => a.interval > b.interval ? 1 : -1)
+            .slice(0, 1);
+        let max = [...intervals].sort((a, b) => a.interval > b.interval ? -1 : 1)
+            .slice(0, 1);
+
         res.json({
             min: Object.values(min).flat(),
             max: Object.values(max).flat()
