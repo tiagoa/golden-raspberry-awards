@@ -27,3 +27,9 @@ O servidor estará rodando em `http://localhost:3000`.
 ## Rota disponível
 
 - `/prize-range`: Retorna os produtores com o maior e menos intervalo entre dois prêmios consecutivos
+
+4. Testes de integração:
+
+```
+npm run test
+```

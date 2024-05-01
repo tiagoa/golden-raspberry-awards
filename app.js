@@ -1,38 +1,7 @@
 const express = require('express');
-const csvParser = require('csv-parser');
-const sqlite3 = require('sqlite3').verbose();
-const fs = require('fs');
+
 const app = express();
-let db;
-app.start = (file, database) => {
-    db = new sqlite3.Database(database);
-    db.serialize(() => {
-        db.run(`DROP TABLE IF EXISTS movies`);
-        db.run(`CREATE TABLE IF NOT EXISTS movies (
-            year INTEGER,
-            title TEXT,
-            studios TEXT,
-            producers TEXT,
-            winner INTEGER
-        )`);
-
-        const csvFilePath = file;
-        const results = [];
-
-        fs.createReadStream(csvFilePath)
-            .pipe(csvParser({separator: ';'}))
-            .on('data', (data) => {
-                results.push(data);
-            })
-            .on('end', () => {
-                const stmt = db.prepare('INSERT INTO movies (year, title, studios, producers, winner) VALUES (?, ?,?,?,?)');
-                results.forEach((row) => {
-                    stmt.run(row['year'], row['title'], row['studios'], row['producers'], row['winner']);
-                });
-                stmt.finalize();
-            });
-    });
-}
+const db = require('./db');
 
 const calculateProducerIntervals = (movies) => {
     const intervals = [];
@@ -55,7 +24,6 @@ const calculateProducerIntervals = (movies) => {
 }
 app.get('/prize-range', (req, res) => {
     const query = 'select * from movies where winner = "yes" order by year'
-
     db.all(query, [], (err, movies) => {
         if (err) {
           console.error('Error executing query:', err.message);
